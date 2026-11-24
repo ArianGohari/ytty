@@ -1,6 +1,32 @@
+```text
+  ██  ██ ██████ ██████ ██  ██
+  ██  ██   ██     ██   ██  ██    YouTube in your terminal.
+   ████    ██     ██    ████
+    ██     ██     ██     ██     ▶ ytty --search 'Me at the zoo'
+    ██     ██     ██     ██
+```
+
 # ytty
 
 Search and play YouTube in your terminal. On macOS, `ytty-ghostty` can open playback in a new Ghostty window or tab.
+
+```text
+Search: Me at the zoo
+
+   1  Me at the zoo
+      jawed  |  19
+   2  Me at the zoo but it's expanded with AI (Runway Gen-3 Alpha)
+      Jake Whitfield  |  11
+   3  Me at the zoo - 8K meme
+      Remas  |  26
+   4  [ Me at the zoo ] where is Jawed Karim in 2026?
+      Info-Beast  |  3:33
+   5  Me at the zoo - 360° VR Video
+      Multiverse 360VR  |  19
+
+Number to play  |  m more  |  s new search  |  q / Enter quit
+>
+```
 
 ## Setup
 
