@@ -52,13 +52,13 @@ ytty-ghostty --tab --id jNQXAC9IVRw
 
 Choose a result by number. Press `m` for the next page, `b` to go back, or `s` for a new search. Press `q` to return from playback, then `q` or Enter at the menu to exit. Use `--logs` with `ytty` to see MPV logs.
 
-Use `--fast` for quicker startup on public videos. It skips cookies and may limit audio options; omit it if playback fails.
+Fast mode is the default in `ytty` and `ytty-ghostty`. It skips cookies and may play stereo instead of surround sound. Try `--no-fast` if playback fails or you expected surround sound.
 
 For agent use, install `skills/youtube` in your agent's skill directory and make sure `ytty-ghostty` is on its `PATH`.
 
 ## Browser cookies (optional)
 
-If YouTube asks you to sign in, select a browser where you're already signed in:
+If YouTube asks you to sign in, use `--no-fast` and select a browser where you're already signed in:
 
 ```sh
 export YTTY_COOKIES_FROM_BROWSER=firefox

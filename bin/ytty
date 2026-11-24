@@ -12,7 +12,7 @@ set_colors() {
 
 usage() {
     set_colors 1
-    printf '%sUsage%s\n  %sytty%s [--fast] [--logs] [MPV options] URL\n  %sytty%s [--fast] [--logs]\n  %sytty --search%s [--fast] [--logs] QUERY\n\n  --fast  Use the visionOS client without browser or file cookies.\n  --logs  Show MPV logs (errors only by default).\n' \
+    printf '%sUsage%s\n  %sytty%s [--fast|--no-fast] [--logs] [MPV options] URL\n  %sytty%s [--fast|--no-fast] [--logs]\n  %sytty --search%s [--fast|--no-fast] [--logs] QUERY\n\n  --fast     Use the visionOS client without cookies (default).\n  --no-fast  Use standard playback and allow configured cookies.\n  --logs     Show MPV logs (errors only by default).\n' \
         "$accent" "$reset" "$accent" "$reset" "$accent" "$reset" "$accent" "$reset"
 }
 
@@ -22,11 +22,12 @@ fail() {
 }
 
 log_level=error
-fast=no
+fast=yes
 while :; do
     case ${1-} in
         --logs) log_level=info; shift ;;
         --fast) fast=yes; shift ;;
+        --no-fast) fast=no; shift ;;
         *) break ;;
     esac
 done
@@ -40,6 +41,7 @@ case ${1-} in
             case ${1-} in
                 --logs) log_level=info; shift ;;
                 --fast) fast=yes; shift ;;
+                --no-fast) fast=no; shift ;;
                 *) break ;;
             esac
         done

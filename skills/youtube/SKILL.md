@@ -21,4 +21,4 @@ ytty-ghostty --window --id 'VIDEO_ID'
 
 Pass the verified ID. Use `--tab` if requested. Use `--search 'QUERY'` instead of `--id` only when the user asks to browse results in Ghostty.
 
-Use normal playback by default. Add `--fast` before `--id` or `--search` only when the user requests the fast mode; it disables cookies and can select a different audio track, including stereo instead of surround sound. If that mode fails or the user reports worse sound, retry once without `--fast` when playback is requested.
+Fast mode is the default. It skips cookies and can select stereo instead of surround sound. If the user asks for normal playback, or if fast mode fails or sounds worse, use `--no-fast` before `--id` or `--search`.
