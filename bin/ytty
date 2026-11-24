@@ -1,0 +1,202 @@
+#!/bin/sh
+
+set_colors() {
+    accent= meta= error= reset=
+    if [ -t "$1" ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${NO_COLOR:-}" ]; then
+        accent=$(printf '\033[1;36m')
+        meta=$(printf '\033[2m')
+        error=$(printf '\033[31m')
+        reset=$(printf '\033[0m')
+    fi
+}
+
+usage() {
+    set_colors 1
+    printf '%sUsage%s\n  %sytty%s [--logs] [MPV options] URL\n  %sytty%s [--logs]\n  %sytty --search%s [--logs] QUERY\n\n  --logs  Show MPV logs (errors only by default).\n' \
+        "$accent" "$reset" "$accent" "$reset" "$accent" "$reset" "$accent" "$reset"
+}
+
+fail() {
+    printf '%sytty:%s %s\n' "$error" "$reset" "$1" >&2
+    exit 1
+}
+
+log_level=error
+if [ "${1-}" = --logs ]; then
+    log_level=info
+    shift
+fi
+
+case ${1-} in
+    --help|-h) usage; exit 0 ;;
+    '') search=yes ;;
+    --search)
+        shift
+        if [ "${1-}" = --logs ]; then
+            log_level=info
+            shift
+        fi
+        [ -n "${1-}" ] || { usage >&2; exit 2; }
+        search=yes
+        ;;
+    *) search=no ;;
+esac
+
+has_fixed_version() {
+    [ -n "$1" ] && [ -x "$1" ] || return 1
+    version=$("$1" --version 2>/dev/null) || return 1
+    printf '%s\n' "$version" | awk -F. '
+        NR == 1 && /^[0-9]+\.[0-9]+\.[0-9]+/ {
+            date = $1 * 10000 + $2 * 100 + $3
+        }
+        END { exit !(date >= 20261123) }
+    '
+}
+
+set_colors 2
+
+extractor=/opt/homebrew/bin/yt-dlp
+if ! has_fixed_version "$extractor"; then
+    extractor=$(command -v yt-dlp)
+    if ! has_fixed_version "$extractor"; then
+        extractor=${UV_TOOL_BIN_DIR:-$HOME/.local/bin}/yt-dlp
+        if ! has_fixed_version "$extractor"; then
+            fail 'yt-dlp 2026.11.23 or later is required. Update with Homebrew or uv.'
+        fi
+    fi
+fi
+
+play() {
+    browser=${YTTY_COOKIES_FROM_BROWSER:-}
+    if [ -z "$browser" ] && [ -n "${YTTY_WATERFOX_PROFILE:-}" ]; then
+        browser=firefox:$YTTY_WATERFOX_PROFILE
+    fi
+    if [ -n "$browser" ]; then
+        set -- --ytdl-raw-options="cookies-from-browser=$browser" "$@"
+    fi
+    exec mpv --vo=kitty --vo-kitty-use-shm=yes --profile=sw-fast \
+        --msg-level="all=$log_level" \
+        --hwdec=videotoolbox-copy --sws-allow-zimg=no --sws-scaler=fast-bilinear \
+        --script-opts-append="ytdl_hook-ytdl_path=$extractor" \
+        --ytdl-format='bestvideo[height<=720]+bestaudio/best[height<=720]' \
+        "$@"
+}
+
+fetch_results() {
+    fetched=$("$extractor" --ignore-config --flat-playlist \
+        --replace-in-metadata 'title,channel,uploader' '[\x00-\x1f\x7f-\x9f]' ' ' \
+        --print "$(printf '%%(id)s\t%%(title)s\t%%(channel,uploader|Unknown)s\t%%(duration_string|?)s')" \
+        -- "ytsearch$1:$2") || return 1
+    printf '%s\n\n%s\n' "$3" "$fetched" | awk -F '\t' '
+        !NF { loading = 1; next }
+        $1 ~ /^[A-Za-z0-9_-]+$/ && length($1) == 11 && !seen[$1]++ {
+            if (!loading || added++ < 5) print
+        }
+    '
+}
+
+show_results() {
+    [ "$screen" = no ] || printf '\033[H\033[2J' >&2
+    printf '%sSearch%s: %s\n\n' "$accent" "$reset" "$query" >&2
+    printf '%s\n' "$results" | awk -F '\t' -v offset="$offset" -v accent="$accent" -v meta="$meta" -v reset="$reset" '
+        NF && NR > offset && NR <= offset + 5 {
+            printf "  %s%2d%s  %s\n      %s%s  |  %s%s\n", accent, NR, reset, $2, meta, $3, $4, reset
+        }
+    ' >&2
+    [ -n "$results" ] || printf '  No videos found.\n' >&2
+    printf '\n%sNumber%s to play  |  %sm%s more' "$accent" "$reset" "$accent" "$reset" >&2
+    if [ "$offset" -gt 0 ] || [ "$nested" = yes ]; then
+        printf '  |  %sb%s back' "$accent" "$reset" >&2
+    fi
+    printf '  |  %ss%s new search  |  %sq%s / %sEnter%s quit\n' "$accent" "$reset" "$accent" "$reset" "$accent" "$reset" >&2
+    [ -z "$notice" ] || printf '%s\n' "$notice" >&2
+}
+
+search_menu() {
+    query=$1
+    results=$2
+    nested=$3
+    offset=0
+    limit=5
+    notice=
+    while :; do
+        show_results
+        notice=
+        printf '%s>%s ' "$accent" "$reset" >&2
+        IFS= read -r choice || return 0
+        case $choice in
+            q|'') return 0 ;;
+            m)
+                count=$(printf '%s\n' "$results" | awk 'NF { n++ } END { print n+0 }')
+                if [ "$count" -le "$((offset + 5))" ]; then
+                    next_limit=$((limit + 5))
+                    if updated=$(fetch_results "$next_limit" "$query" "$results"); then
+                        limit=$next_limit
+                        if [ "$updated" = "$results" ]; then
+                            notice='No more results.'
+                            continue
+                        fi
+                        results=$updated
+                    else
+                        notice='Could not load more results.'
+                        continue
+                    fi
+                fi
+                offset=$((offset + 5))
+                ;;
+            b)
+                if [ "$offset" -gt 0 ]; then
+                    offset=$((offset - 5))
+                elif [ "$nested" = yes ]; then
+                    return 10
+                fi
+                ;;
+            s)
+                [ "$screen" = no ] || printf '\033[H\033[2J' >&2
+                printf '%sSearch%s: ' "$accent" "$reset" >&2
+                IFS= read -r new_query || return 0
+                case $new_query in *[![:space:]]*) ;; *) continue ;; esac
+                if updated=$(fetch_results 5 "$new_query" ''); then
+                    ( search_menu "$new_query" "$updated" yes )
+                    case $? in 10) ;; *) return 0 ;; esac
+                else
+                    notice='YouTube search failed.'
+                fi
+                ;;
+            *[!0-9]*) notice='Unknown command.' ;;
+            *)
+                id=$(printf '%s\n' "$results" | awk -F '\t' -v n="$choice" 'NR == n { print $1 }')
+                if [ -n "$id" ]; then
+                    if [ "$screen" = yes ]; then trap ':' INT; fi
+                    (play "https://www.youtube.com/watch?v=$id")
+                    status=$?
+                    if [ "$screen" = yes ]; then trap 'exit 130' INT; fi
+                    case $status in
+                        0|4|130) ;;
+                        *) notice='MPV could not play the video.' ;;
+                    esac
+                else
+                    notice='That number is not in the list.'
+                fi
+                ;;
+        esac
+    done
+}
+
+[ "$search" = yes ] || play "$@"
+screen=no
+if [ -t 0 ] && [ -t 2 ] && [ "${TERM:-dumb}" != dumb ]; then
+    screen=yes
+    trap 'printf "\033[?1049l" >&2' 0
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    printf '\033[?1049h\033[H\033[2J' >&2
+fi
+query=$*
+if [ "$#" -eq 0 ]; then
+    printf '%sSearch%s: ' "$accent" "$reset" >&2
+    IFS= read -r query || exit 0
+    case $query in *[![:space:]]*) ;; *) exit 0 ;; esac
+fi
+results=$(fetch_results 5 "$query" '') || fail 'YouTube search failed.'
+search_menu "$query" "$results" no

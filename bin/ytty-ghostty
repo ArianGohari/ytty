@@ -1,0 +1,58 @@
+#!/bin/sh
+
+mode=window
+case ${1-} in
+    --window|--tab) mode=${1#--}; shift ;;
+esac
+
+usage() {
+    printf '%s\n' 'Usage: ytty-ghostty [--window|--tab] YOUTUBE_URL' \
+        '       ytty-ghostty [--window|--tab] --id VIDEO_ID' \
+        '       ytty-ghostty [--window|--tab] --search QUERY'
+}
+
+case ${1-} in
+    --help|-h) usage; exit 0 ;;
+    --search) [ "$#" -eq 2 ] && [ -n "$2" ] || { usage >&2; exit 2; } ;;
+    --id)
+        [ "$#" -eq 2 ] && [ "${#2}" -eq 11 ] || { usage >&2; exit 2; }
+        case $2 in *[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-]*) usage >&2; exit 2 ;; esac
+        set -- --ytdl-raw-options-append=no-playlist= "https://www.youtube.com/watch?v=$2"
+        ;;
+    https://youtube.com/*|https://www.youtube.com/*|https://m.youtube.com/*|https://youtu.be/*)
+        [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+        set -- --ytdl-raw-options-append=no-playlist= "$1"
+        ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+bindir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+player=$bindir/ytty
+[ -r "$player" ] || { printf 'Cannot read %s\n' "$player" >&2; exit 1; }
+
+exec /usr/bin/osascript - "$mode" "$HOME/.local/bin:/opt/homebrew/bin:$PATH" \
+    "${YTTY_COOKIES_FROM_BROWSER:-}" "${YTTY_WATERFOX_PROFILE:-}" "$player" "$@" <<'APPLESCRIPT'
+on run argv
+    set launchMode to item 1 of argv
+    set playerCommand to "/usr/bin/env " & quoted form of ("PATH=" & item 2 of argv)
+    set playerCommand to playerCommand & " " & quoted form of ("YTTY_COOKIES_FROM_BROWSER=" & item 3 of argv)
+    set playerCommand to playerCommand & " " & quoted form of ("YTTY_WATERFOX_PROFILE=" & item 4 of argv)
+    set playerCommand to playerCommand & " " & quoted form of (item 5 of argv)
+    repeat with playerArg in items 6 thru -1 of argv
+        set playerCommand to playerCommand & " " & quoted form of (contents of playerArg)
+    end repeat
+
+    tell application "Ghostty"
+        set cfg to new surface configuration
+        set command of cfg to playerCommand
+        set wait after command of cfg to false
+        if launchMode is "tab" and (count of windows) > 0 then
+            set targetWindow to front window
+            new tab in targetWindow with configuration cfg
+        else
+            new window with configuration cfg
+        end if
+        activate
+    end tell
+end run
+APPLESCRIPT
