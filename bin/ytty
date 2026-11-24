@@ -78,7 +78,7 @@ play() {
         --msg-level="all=$log_level" \
         --hwdec=videotoolbox-copy --sws-allow-zimg=no --sws-scaler=fast-bilinear \
         --script-opts-append="ytdl_hook-ytdl_path=$extractor" \
-        --ytdl-format='bestvideo+bestaudio/best' \
+        --ytdl-format='bestvideo[height<=1080]+bestaudio/best[height<=1080]' \
         "$@"
 }
 

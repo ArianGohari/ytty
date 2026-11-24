@@ -1,6 +1,6 @@
 # ytty
 
-Search and play YouTube in your terminal at the best available quality. On macOS, `ytty-ghostty` can open playback in a new Ghostty window or tab.
+Search and play YouTube in your terminal, defaulting to up to 1080p. On macOS, `ytty-ghostty` can open playback in a new Ghostty window or tab.
 
 ## Setup
 
