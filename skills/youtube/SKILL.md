@@ -16,9 +16,9 @@ Show up to three results by default: `1. **Titel** (Kanal)`. No intro, outro, em
 Open Ghostty only on request. A valid number alone after the latest YouTube results selects that video for immediate playback. This also applies to `/youtube 1` and `$youtube 1`. Don't ask for confirmation.
 
 ```sh
-ytty-ghostty --tab --id 'VIDEO_ID'
+ytty-ghostty --window --id 'VIDEO_ID'
 ```
 
-Pass the verified ID. Ghostty opens a new window if none exists. Use `--window` if the user asks for a separate window. Use `--search 'QUERY'` instead of `--id` only when the user asks to browse results in Ghostty.
+Pass the verified ID. Use `--tab` if requested; if no Ghostty window exists, this opens a new window instead. Use `--search 'QUERY'` instead of `--id` only when the user asks to browse results in Ghostty.
 
 Fast mode is the default. It skips cookies and can select stereo instead of surround sound. If the user asks for normal playback, or if fast mode fails or sounds worse, use `--no-fast` before `--id` or `--search`.
