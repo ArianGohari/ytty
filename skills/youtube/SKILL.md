@@ -21,4 +21,4 @@ ytty-ghostty --window --id 'VIDEO_ID'
 
 Pass the verified ID. Use `--tab` if requested; if no Ghostty window exists, this opens a new window instead. Use `--search 'QUERY'` instead of `--id` only when the user asks to browse results in Ghostty.
 
-Fast mode is the default. It skips cookies and can select stereo instead of surround sound. If the user asks for normal playback, or if fast mode fails or sounds worse, use `--no-fast` before `--id` or `--search`.
+Fast mode is the default. If YouTube asks you to sign in to confirm you're not a bot, ytty retries once with the configured browser cookies. For other playback failures, worse sound, or a request for standard playback, use `--no-fast` before `--id` or `--search`.

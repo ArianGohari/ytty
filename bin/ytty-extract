@@ -1,0 +1,29 @@
+#!/bin/sh
+
+: "${YTTY_EXTRACTOR:?}" "${YTTY_RETRY_BROWSER:?}"
+
+fast_extract() {
+    "$YTTY_EXTRACTOR" --extractor-args 'youtube:player_client=visionos' \
+        --no-cookies-from-browser --no-cookies "$@"
+}
+
+for url do :; done
+case ${url-} in
+    http://youtube.com/*|https://youtube.com/*|http://*.youtube.com/*|https://*.youtube.com/*|http://youtu.be/*|https://youtu.be/*) ;;
+    *) exec "$YTTY_EXTRACTOR" --extractor-args 'youtube:player_client=visionos' \
+        --no-cookies-from-browser --no-cookies "$@" ;;
+esac
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/ytty-extract.XXXXXXXX") || { fast_extract "$@"; exit "$?"; }
+trap 'rm -rf -- "$tmp"' 0
+trap 'exit 1' HUP INT TERM
+
+fast_extract "$@" >"$tmp/out" 2>"$tmp/err"
+status=$?
+if [ "$status" -ne 0 ] && LC_ALL=C grep -qE '^ERROR: \[youtube\].*Sign in to confirm you[^ ]+re not a bot' "$tmp/err"; then
+    "$YTTY_EXTRACTOR" --cookies-from-browser "$YTTY_RETRY_BROWSER" "$@"
+    exit "$?"
+fi
+cat "$tmp/err" >&2
+cat "$tmp/out"
+exit "$status"

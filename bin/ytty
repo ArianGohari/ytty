@@ -76,18 +76,23 @@ if ! has_fixed_version "$extractor"; then
 fi
 
 play() {
+    browser=${YTTY_COOKIES_FROM_BROWSER:-}
+    if [ -z "$browser" ] && [ -n "${YTTY_WATERFOX_PROFILE:-}" ]; then
+        browser=firefox:$YTTY_WATERFOX_PROFILE
+    fi
     if [ "$fast" = yes ]; then
-        set -- --ytdl-raw-options-append='extractor-args=youtube:player_client=visionos' \
-            --ytdl-raw-options-append=no-cookies-from-browser= \
-            --ytdl-raw-options-append=no-cookies= "$@"
-    else
-        browser=${YTTY_COOKIES_FROM_BROWSER:-}
-        if [ -z "$browser" ] && [ -n "${YTTY_WATERFOX_PROFILE:-}" ]; then
-            browser=firefox:$YTTY_WATERFOX_PROFILE
-        fi
         if [ -n "$browser" ]; then
-            set -- --ytdl-raw-options="cookies-from-browser=$browser" "$@"
+            bindir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || return 1
+            YTTY_EXTRACTOR=$extractor YTTY_RETRY_BROWSER=$browser
+            export YTTY_EXTRACTOR YTTY_RETRY_BROWSER
+            extractor=$bindir/ytty-extract
+        else
+            set -- --ytdl-raw-options-append='extractor-args=youtube:player_client=visionos' \
+                --ytdl-raw-options-append=no-cookies-from-browser= \
+                --ytdl-raw-options-append=no-cookies= "$@"
         fi
+    elif [ -n "$browser" ]; then
+        set -- --ytdl-raw-options-append="cookies-from-browser=$browser" "$@"
     fi
     exec mpv --vo=kitty --vo-kitty-use-shm=yes --profile=sw-fast \
         --msg-level="all=$log_level" \
