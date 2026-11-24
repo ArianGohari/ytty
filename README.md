@@ -52,7 +52,7 @@ ytty-ghostty --tab --id jNQXAC9IVRw
 
 Choose a result by number. Press `m` for the next page, `b` to go back, or `s` for a new search. Press `q` to return from playback, then `q` or Enter at the menu to exit. Use `--logs` with `ytty` to see MPV logs.
 
-Use `--fast` for faster playback startup on public videos, for example `ytty --fast --search 'Me at the zoo'` or `ytty-ghostty --tab --fast --id jNQXAC9IVRw`. This uses the visionOS client without browser or file cookies and may offer fewer audio options, such as stereo instead of surround sound. Omit `--fast` if a video needs sign-in or does not play.
+Use `--fast` for quicker startup on public videos. It skips cookies and may limit audio options; omit it if playback fails.
 
 For agent use, install `skills/youtube` in your agent's skill directory and make sure `ytty-ghostty` is on its `PATH`.
 
