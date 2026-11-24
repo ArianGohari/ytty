@@ -19,9 +19,9 @@ export PATH="/path/to/ytty/bin:$PATH"
 
 ```sh
 ytty
-ytty --search 'Ninja Nerd Cell Junctions'
-ytty 'YOUTUBE_URL'
-ytty-ghostty --tab --id gmlA8V2zMv4
+ytty --search 'Me at the zoo'
+ytty 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
+ytty-ghostty --tab --id jNQXAC9IVRw
 ```
 
 Choose a result by number. Press `m` for the next page, `b` to go back, or `s` for a new search. Press `q` to return from playback, then `q` or Enter at the menu to exit. Use `--logs` with `ytty` to see MPV logs.
