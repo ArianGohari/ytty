@@ -12,7 +12,7 @@ set_colors() {
 
 usage() {
     set_colors 1
-    printf '%sUsage%s\n  %sytty%s [--logs] [MPV options] URL\n  %sytty%s [--logs]\n  %sytty --search%s [--logs] QUERY\n\n  --logs  Show MPV logs (errors only by default).\n' \
+    printf '%sUsage%s\n  %sytty%s [--fast] [--logs] [MPV options] URL\n  %sytty%s [--fast] [--logs]\n  %sytty --search%s [--fast] [--logs] QUERY\n\n  --fast  Use the visionOS client without browser or file cookies.\n  --logs  Show MPV logs (errors only by default).\n' \
         "$accent" "$reset" "$accent" "$reset" "$accent" "$reset" "$accent" "$reset"
 }
 
@@ -22,20 +22,27 @@ fail() {
 }
 
 log_level=error
-if [ "${1-}" = --logs ]; then
-    log_level=info
-    shift
-fi
+fast=no
+while :; do
+    case ${1-} in
+        --logs) log_level=info; shift ;;
+        --fast) fast=yes; shift ;;
+        *) break ;;
+    esac
+done
 
 case ${1-} in
     --help|-h) usage; exit 0 ;;
     '') search=yes ;;
     --search)
         shift
-        if [ "${1-}" = --logs ]; then
-            log_level=info
-            shift
-        fi
+        while :; do
+            case ${1-} in
+                --logs) log_level=info; shift ;;
+                --fast) fast=yes; shift ;;
+                *) break ;;
+            esac
+        done
         [ -n "${1-}" ] || { usage >&2; exit 2; }
         search=yes
         ;;
@@ -55,9 +62,9 @@ has_fixed_version() {
 
 set_colors 2
 
-extractor=/opt/homebrew/bin/yt-dlp
+extractor=$(command -v yt-dlp)
 if ! has_fixed_version "$extractor"; then
-    extractor=$(command -v yt-dlp)
+    extractor=/opt/homebrew/bin/yt-dlp
     if ! has_fixed_version "$extractor"; then
         extractor=${UV_TOOL_BIN_DIR:-$HOME/.local/bin}/yt-dlp
         if ! has_fixed_version "$extractor"; then
@@ -67,12 +74,18 @@ if ! has_fixed_version "$extractor"; then
 fi
 
 play() {
-    browser=${YTTY_COOKIES_FROM_BROWSER:-}
-    if [ -z "$browser" ] && [ -n "${YTTY_WATERFOX_PROFILE:-}" ]; then
-        browser=firefox:$YTTY_WATERFOX_PROFILE
-    fi
-    if [ -n "$browser" ]; then
-        set -- --ytdl-raw-options="cookies-from-browser=$browser" "$@"
+    if [ "$fast" = yes ]; then
+        set -- --ytdl-raw-options-append='extractor-args=youtube:player_client=visionos' \
+            --ytdl-raw-options-append=no-cookies-from-browser= \
+            --ytdl-raw-options-append=no-cookies= "$@"
+    else
+        browser=${YTTY_COOKIES_FROM_BROWSER:-}
+        if [ -z "$browser" ] && [ -n "${YTTY_WATERFOX_PROFILE:-}" ]; then
+            browser=firefox:$YTTY_WATERFOX_PROFILE
+        fi
+        if [ -n "$browser" ]; then
+            set -- --ytdl-raw-options="cookies-from-browser=$browser" "$@"
+        fi
     fi
     exec mpv --vo=kitty --vo-kitty-use-shm=yes --profile=sw-fast \
         --msg-level="all=$log_level" \

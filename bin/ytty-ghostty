@@ -1,14 +1,19 @@
 #!/bin/sh
 
 mode=window
-case ${1-} in
-    --window|--tab) mode=${1#--}; shift ;;
-esac
+fast=no
+while :; do
+    case ${1-} in
+        --window|--tab) mode=${1#--}; shift ;;
+        --fast) fast=yes; shift ;;
+        *) break ;;
+    esac
+done
 
 usage() {
-    printf '%s\n' 'Usage: ytty-ghostty [--window|--tab] YOUTUBE_URL' \
-        '       ytty-ghostty [--window|--tab] --id VIDEO_ID' \
-        '       ytty-ghostty [--window|--tab] --search QUERY'
+    printf '%s\n' 'Usage: ytty-ghostty [--window|--tab] [--fast] YOUTUBE_URL' \
+        '       ytty-ghostty [--window|--tab] [--fast] --id VIDEO_ID' \
+        '       ytty-ghostty [--window|--tab] [--fast] --search QUERY'
 }
 
 case ${1-} in
@@ -25,6 +30,8 @@ case ${1-} in
         ;;
     *) usage >&2; exit 2 ;;
 esac
+
+[ "$fast" = no ] || set -- --fast "$@"
 
 bindir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 player=$bindir/ytty
