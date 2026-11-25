@@ -51,7 +51,7 @@ ytty-ghostty --split --id jNQXAC9IVRw
 
 Pick a result by number. Use `m` for more results, `b` to go back, or `s` for a new search. Press `q` during playback to return to the search menu, then `q` or Enter to exit.
 
-`ytty-ghostty` opens a window by default. Use `--tab` for a tab or `--split` to play beside your current Ghostty terminal. See `ytty --help` and `ytty-ghostty --help` for more commands.
+`ytty-ghostty` opens a window by default. Use `--tab` for a tab or `--split` to play beside your current Ghostty terminal. If the caller has no matching Ghostty terminal, `--split` uses the focused terminal in Ghostty's front window. See `ytty --help` and `ytty-ghostty --help` for more commands.
 
 For agent use, install the [YouTube skill](skills/youtube/SKILL.md) and put `ytty-ghostty` on the agent's `PATH`.
 

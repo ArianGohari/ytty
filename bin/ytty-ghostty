@@ -151,7 +151,6 @@ case $mode in
                 }
             }
         ')
-        [ -n "$origin_tty" ] || { printf '%s\n' 'Run --split from a Ghostty terminal, or use --window.' >&2; exit 1; }
         if [ "$action" != --search ]; then
             slot=$(mktemp -d /tmp/ytty.XXXXXXXXXXXX) || exit 1
             set -- "--input-ipc-server=$slot/mpv.sock" --idle=yes "$@"
@@ -177,15 +176,21 @@ on run argv
     end if
 
     tell application "Ghostty"
+        if launchMode starts with "split-" then
+            if not running or (count of windows) is 0 then error "No Ghostty window to split. Open one, or use --window."
+            set originTerminals to {}
+            if originTTY is not "" then set originTerminals to terminals whose tty is originTTY
+            if (count of originTerminals) > 0 then
+                set targetTerminal to first item of originTerminals
+            else
+                set targetTerminal to focused terminal of selected tab of front window
+            end if
+        end if
+
         set cfg to new surface configuration
         set command of cfg to playerCommand
         set wait after command of cfg to false
         if launchMode starts with "split-" then
-            try
-                set targetTerminal to first terminal whose tty is originTTY
-            on error number -1728
-                error "Run --split from a Ghostty terminal, or use --window."
-            end try
             if launchMode is "split-left" then
                 split targetTerminal direction left with configuration cfg
             else
