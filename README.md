@@ -30,8 +30,8 @@ Number to play  |  m more  |  s new search  |  q / Enter quit
 
 ## Setup
 
-- `mpv`
-- `yt-dlp` 2026.11.23 or newer
+- [`mpv`](https://mpv.io/installation/)
+- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp/wiki/Installation) 2026.11.23 or newer
 - A terminal with Kitty graphics support
 - [Ghostty](https://ghostty.org/) 1.3 or newer on macOS for `ytty-ghostty`
 
