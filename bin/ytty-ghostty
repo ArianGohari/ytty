@@ -1,59 +1,203 @@
 #!/bin/sh
 
-mode=window
+usage() {
+    printf '%s\n' 'Usage: ytty-ghostty [--window|--tab|--split[=left|right]] [--fast|--no-fast]' \
+        '                    [--start=TIME] {YOUTUBE_URL | --id VIDEO_ID | --first QUERY | --resume}' \
+        '       ytty-ghostty [--window|--tab|--split[=left|right]] [--fast|--no-fast] --search QUERY' \
+        '       ytty-ghostty --replace PLAYER_TOKEN [--start=TIME] --id VIDEO_ID' \
+        '       ytty-ghostty --control PLAYER_TOKEN {pause | play | position | seek SECONDS}' \
+        '' 'Default: --window. --split opens on the right and prints its token for direct playback.'
+}
+
+invalid() { usage >&2; exit 2; }
+
+valid_token() {
+    [ "${#1}" -eq 12 ] || return 1
+    case $1 in *[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]*) return 1 ;; esac
+}
+
+player_command() {
+    slot=/tmp/ytty.$1
+    shift
+    socket=$slot/mpv.sock
+    [ -O "$slot" ] && [ ! -L "$slot" ] && [ -S "$socket" ] || {
+        printf '%s\n' 'That player split is not running.' >&2; exit 1;
+    }
+    /usr/bin/perl -MIO::Socket::UNIX -MJSON::PP -e '
+        alarm 2;
+        my ($socket, $action, $arg, $start) = @ARGV;
+        my $peer = IO::Socket::UNIX->new(Peer => $socket) or exit 1;
+        $peer->autoflush(1);
+        my @command;
+        if ($action eq "replace") {
+            @command = ("loadfile", $arg, "replace");
+            push @command, -1, {start => $start, "resume-playback" => "no"} if length $start;
+        } elsif ($action eq "seek") {
+            @command = ("seek", 0 + $arg, "relative+exact");
+        } elsif ($action eq "position") {
+            @command = ("get_property", "time-pos");
+        } else {
+            @command = ("set_property", "pause", $action eq "pause" ? JSON::PP::true : JSON::PP::false);
+        }
+        print $peer encode_json({command => \@command, request_id => 1}), "\n" or exit 1;
+        while (my $line = <$peer>) {
+            my $reply = eval { decode_json($line) };
+            next unless ref $reply eq "HASH" && ($reply->{request_id} // 0) == 1;
+            exit 1 unless ($reply->{error} // "") eq "success";
+            if ($action eq "position") {
+                exit 1 unless defined $reply->{data};
+                print $reply->{data}, "\n";
+            }
+            exit 0;
+        }
+        exit 1;
+    ' "$socket" "$@" 2>/dev/null
+}
+
+if [ "${1-}" = --control ]; then
+    shift
+    [ "$#" -ge 2 ] && valid_token "$1" || invalid
+    case $2 in
+        pause|play|position) [ "$#" -eq 2 ] || invalid ;;
+        seek)
+            [ "$#" -eq 3 ] || invalid
+            seconds=$3
+            case $seconds in [+-]*) seconds=${seconds#?} ;; esac
+            case $seconds in ''|*[!0123456789]*) invalid ;; esac
+            [ "${#seconds}" -le 9 ] || invalid
+            ;;
+        *) invalid ;;
+    esac
+    player_command "$@" && exit 0
+    printf '%s\n' 'The player split did not complete the command.' >&2
+    exit 1
+fi
+
+mode=
 playback_mode=
+start=
+replace=
 while :; do
     case ${1-} in
         --window|--tab) mode=${1#--}; shift ;;
+        --split|--split=right) mode=split-right; shift ;;
+        --split=left) mode=split-left; shift ;;
         --fast|--no-fast) playback_mode=$1; shift ;;
+        --start=*)
+            start=${1#--start=}
+            printf '%s\n' "$start" | LC_ALL=C /usr/bin/grep -Eq '^[0-9]+(:[0-5]?[0-9]){0,2}(\.[0-9]+)?$' || invalid
+            case $start in *[!0123456789:.]*) invalid ;; esac
+            shift ;;
+        --replace)
+            [ "$#" -ge 2 ] && valid_token "$2" || invalid
+            replace=$2; shift 2 ;;
         *) break ;;
     esac
 done
 
-usage() {
-    printf '%s\n' 'Usage: ytty-ghostty [--window|--tab] [--fast|--no-fast] YOUTUBE_URL' \
-        '       ytty-ghostty [--window|--tab] [--fast|--no-fast] --id VIDEO_ID' \
-        '       ytty-ghostty [--window|--tab] [--fast|--no-fast] --search QUERY'
-}
-
+browse=no
 case ${1-} in
     --help|-h) usage; exit 0 ;;
-    --search) [ "$#" -eq 2 ] && [ -n "$2" ] || { usage >&2; exit 2; } ;;
+    --search|--first)
+        [ "$#" -eq 2 ] && [ -n "$2" ] || invalid
+        if [ "$1" = --search ]; then
+            [ -z "$start" ] || invalid
+            browse=yes
+        fi
+        ;;
+    --resume) [ "$#" -eq 1 ] || invalid ;;
     --id)
-        [ "$#" -eq 2 ] && [ "${#2}" -eq 11 ] || { usage >&2; exit 2; }
-        case $2 in *[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-]*) usage >&2; exit 2 ;; esac
+        [ "$#" -eq 2 ] && [ "${#2}" -eq 11 ] || invalid
+        case $2 in *[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-]*) invalid ;; esac
         set -- --ytdl-raw-options-append=no-playlist= "https://www.youtube.com/watch?v=$2"
         ;;
     https://youtube.com/*|https://www.youtube.com/*|https://m.youtube.com/*|https://youtu.be/*)
-        [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+        [ "$#" -eq 1 ] && [ -z "$replace" ] || invalid
         set -- --ytdl-raw-options-append=no-playlist= "$1"
         ;;
-    *) usage >&2; exit 2 ;;
+    *) invalid ;;
 esac
 
+if [ -n "$replace" ]; then
+    [ -z "$mode$playback_mode" ] && [ "$1" = --ytdl-raw-options-append=no-playlist= ] || invalid
+    player_command "$replace" replace "$2" "$start" && exit 0
+    printf '%s\n' 'The player split did not accept the video.' >&2
+    exit 1
+fi
+
+if [ -n "$start" ]; then
+    if [ "$1" = --ytdl-raw-options-append=no-playlist= ]; then
+        set -- "$1" '--{' "--start=$start" --resume-playback=no "$2" '--}'
+    else
+        set -- "--start=$start" "$@"
+    fi
+fi
 [ -z "$playback_mode" ] || set -- "$playback_mode" "$@"
+mode=${mode:-window}
 
 bindir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 player=$bindir/ytty
 [ -r "$player" ] || { printf 'Cannot read %s\n' "$player" >&2; exit 1; }
 
-exec /usr/bin/osascript - "$mode" "$HOME/.local/bin:/opt/homebrew/bin:$PATH" \
-    "${YTTY_COOKIES_FROM_BROWSER:-}" "${YTTY_WATERFOX_PROFILE:-}" "$player" "$@" <<'APPLESCRIPT'
+origin_tty=
+slot=
+case $mode in
+    split-*)
+        # Agent tool shells may have no TTY, but their parent process can.
+        origin_tty=$(ps -axo pid=,ppid=,tty= | awk -v pid="$$" '
+            { parent[$1] = $2; terminal[$1] = $3 }
+            END {
+                while (pid > 1 && pid in parent) {
+                    if (terminal[pid] != "??") { print "/dev/" terminal[pid]; exit }
+                    pid = parent[pid]
+                }
+            }
+        ')
+        [ -n "$origin_tty" ] || { printf '%s\n' 'Run --split from a Ghostty terminal, or use --window.' >&2; exit 1; }
+        if [ "$browse" = no ]; then
+            slot=$(mktemp -d /tmp/ytty.XXXXXXXXXXXX) || exit 1
+            set -- "--input-ipc-server=$slot/mpv.sock" --idle=yes "$@"
+        fi
+        ;;
+esac
+
+/usr/bin/osascript - "$mode" "$origin_tty" "$slot" "$player" \
+    "PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH" "XDG_STATE_HOME=${XDG_STATE_HOME:-}" \
+    "YTTY_COOKIES_FROM_BROWSER=${YTTY_COOKIES_FROM_BROWSER:-}" \
+    "YTTY_WATERFOX_PROFILE=${YTTY_WATERFOX_PROFILE:-}" "$@" <<'APPLESCRIPT'
 on run argv
     set launchMode to item 1 of argv
-    set playerCommand to "/usr/bin/env " & quoted form of ("PATH=" & item 2 of argv)
-    set playerCommand to playerCommand & " " & quoted form of ("YTTY_COOKIES_FROM_BROWSER=" & item 3 of argv)
-    set playerCommand to playerCommand & " " & quoted form of ("YTTY_WATERFOX_PROFILE=" & item 4 of argv)
-    set playerCommand to playerCommand & " " & quoted form of (item 5 of argv)
-    repeat with playerArg in items 6 thru -1 of argv
+    set originTTY to item 2 of argv
+    set playerSlot to item 3 of argv
+    set playerCommand to "/usr/bin/env"
+    repeat with playerEnv in items 5 thru 8 of argv
+        set playerCommand to playerCommand & " " & quoted form of (contents of playerEnv)
+    end repeat
+    set playerCommand to playerCommand & " " & quoted form of (item 4 of argv)
+    repeat with playerArg in items 9 thru -1 of argv
         set playerCommand to playerCommand & " " & quoted form of (contents of playerArg)
     end repeat
+    if playerSlot is not "" then
+        set cleanupScript to "slot=$1; shift; trap 'rm -f \"$slot/mpv.sock\"; rmdir \"$slot\"' 0; trap 'exit 129' HUP; trap 'exit 143' TERM; \"$@\""
+        set playerCommand to "/bin/sh -c " & quoted form of cleanupScript & " ytty-split " & quoted form of playerSlot & " " & playerCommand
+    end if
 
     tell application "Ghostty"
         set cfg to new surface configuration
         set command of cfg to playerCommand
         set wait after command of cfg to false
-        if launchMode is "tab" and (count of windows) > 0 then
+        if launchMode starts with "split-" then
+            try
+                set targetTerminal to first terminal whose tty is originTTY
+            on error number -1728
+                error "Run --split from a Ghostty terminal, or use --window."
+            end try
+            if launchMode is "split-left" then
+                split targetTerminal direction left with configuration cfg
+            else
+                split targetTerminal direction right with configuration cfg
+            end if
+        else if launchMode is "tab" and (count of windows) > 0 then
             set targetWindow to front window
             new tab in targetWindow with configuration cfg
         else
@@ -61,5 +205,12 @@ on run argv
         end if
         activate
     end tell
+    return
 end run
 APPLESCRIPT
+status=$?
+if [ "$status" -ne 0 ]; then
+    [ -z "$slot" ] || rmdir "$slot" 2>/dev/null
+    exit "$status"
+fi
+[ -z "$slot" ] || printf 'Split: %s\n' "${slot##*.}"

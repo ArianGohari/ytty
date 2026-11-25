@@ -8,7 +8,7 @@
 
 # ytty
 
-Search and play YouTube in your terminal. On macOS, `ytty-ghostty` can open playback in a new Ghostty window or tab.
+Search and play YouTube in your terminal. On macOS, `ytty-ghostty` can open playback in a Ghostty window, tab, or split.
 
 ```text
 Search: Me at the zoo
@@ -46,15 +46,25 @@ export PATH="/path/to/ytty/bin:$PATH"
 ```sh
 ytty
 ytty --search 'Me at the zoo'
+ytty --first 'Me at the zoo'
+ytty --resume
 ytty 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
+ytty-ghostty --start=0:10 --id jNQXAC9IVRw
 ytty-ghostty --tab --id jNQXAC9IVRw
+ytty-ghostty --split --id jNQXAC9IVRw
 ```
+
+`--first` skips the search menu. `--resume` opens the last YouTube video that loaded, at the position mpv saved when it quit. Use `--start=TIME` to jump to a specific time instead. `ytty-ghostty` accepts all three options.
+
+`ytty-ghostty` opens a window by default. From Ghostty, use `--split` to open the player on the right or `--split=left` to open it on the left. The split opens next to the terminal that ran the command, even if you've switched focus. For direct playback, the launcher prints `Split: PLAYER_TOKEN`. Use `ytty-ghostty --replace PLAYER_TOKEN --id VIDEO_ID` to change the video without opening another split.
+
+Use `ytty-ghostty --control PLAYER_TOKEN pause` to pause from the calling terminal, and `play` to continue. `seek -20` jumps back 20 seconds; `seek +20` jumps forward. `position` prints the current position in seconds. These commands don't change focus or open a new player.
 
 Choose a result by number. Press `m` for the next page, `b` to go back, or `s` for a new search. Press `q` to return from playback, then `q` or Enter at the menu to exit. Use `--logs` with `ytty` to see MPV logs.
 
 Fast mode is the default in `ytty` and `ytty-ghostty`. It starts without cookies and may play stereo instead of surround sound. Try `--no-fast` for other playback errors or if you expected surround sound.
 
-For agent use, install `skills/youtube` in your agent's skill directory and make sure `ytty-ghostty` is on its `PATH`.
+For agent use, install `skills/youtube` in your agent's skill directory and make sure `ytty-ghostty` is on its `PATH`. The skill opens a window unless you ask for a tab or split.
 
 ## Browser cookies (optional)
 

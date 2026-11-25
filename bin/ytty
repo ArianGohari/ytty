@@ -12,8 +12,13 @@ set_colors() {
 
 usage() {
     set_colors 1
-    printf '%sUsage%s\n  %sytty%s [--fast|--no-fast] [--logs] [MPV options] URL\n  %sytty%s [--fast|--no-fast] [--logs]\n  %sytty --search%s [--fast|--no-fast] [--logs] QUERY\n\n  --fast     Use the visionOS client without cookies (default).\n  --no-fast  Use standard playback and allow configured cookies.\n  --logs     Show MPV logs (errors only by default).\n' \
-        "$accent" "$reset" "$accent" "$reset" "$accent" "$reset" "$accent" "$reset"
+    printf '%sUsage%s\n  %sytty%s [--fast|--no-fast] [--logs] [MPV options] URL\n  %sytty%s [--fast|--no-fast] [--logs]\n  %sytty --search%s [--fast|--no-fast] [--logs] QUERY\n  %sytty%s [options] --first QUERY | --resume\n\n  --fast     Use the visionOS client without cookies (default).\n  --no-fast  Use standard playback and allow configured cookies.\n  --logs     Show MPV logs (errors only by default).\n  --first    Play the first YouTube search result.\n  --resume   Play the last loaded YouTube video.\n\n  Before --first or --resume: --start=TIME, --input-ipc-server=SOCKET, --idle=yes.\n' \
+        "$accent" "$reset" "$accent" "$reset" "$accent" "$reset" "$accent" "$reset" "$accent" "$reset"
+}
+
+usage_error() {
+    usage >&2
+    exit 2
 }
 
 fail() {
@@ -32,7 +37,47 @@ while :; do
     esac
 done
 
-case ${1-} in
+# Only consume these mpv options when they precede an action handled by ytty.
+action=
+option_count=0
+start= ipc= idle=
+for arg do
+    case $arg in
+        --start=*) start=$arg ;;
+        --input-ipc-server=*) ipc=$arg ;;
+        --idle=yes) idle=$arg ;;
+        --first|--resume) action=$arg; shift "$((option_count + 1))"; break ;;
+        *) break ;;
+    esac
+    option_count=$((option_count + 1))
+done
+
+case $action in
+    --first)
+        [ "$#" -eq 1 ] || usage_error
+        case $1 in *[![:space:]]*) ;; *) usage_error ;; esac
+        ;;
+    --resume) [ "$#" -eq 0 ] || usage_error ;;
+esac
+
+set_colors 2
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/ytty
+last_video=$state_dir/last-video
+if [ -n "$action" ]; then
+    [ "$start" != --start= ] && [ "$ipc" != --input-ipc-server= ] || usage_error
+    if [ "$action" = --resume ]; then
+        resume_url=$(cat "$last_video" 2>/dev/null) || fail 'No last YouTube video.'
+        case $resume_url in
+            *[![:graph:]]*) fail 'Invalid last YouTube video.' ;;
+            http://youtube.com/*|http://www.youtube.com/*|http://m.youtube.com/*|http://youtu.be/*|\
+            https://youtube.com/*|https://www.youtube.com/*|https://m.youtube.com/*|https://youtu.be/*) ;;
+            *) fail 'Invalid last YouTube video.' ;;
+        esac
+    fi
+fi
+
+case ${action:-${1-}} in
+    --first|--resume) ;;
     --help|-h) usage; exit 0 ;;
     '') search=yes ;;
     --search)
@@ -62,8 +107,6 @@ has_fixed_version() {
     '
 }
 
-set_colors 2
-
 extractor=$(command -v yt-dlp)
 if ! has_fixed_version "$extractor"; then
     extractor=/opt/homebrew/bin/yt-dlp
@@ -75,14 +118,34 @@ if ! has_fixed_version "$extractor"; then
     fi
 fi
 
+video_url() {
+    printf 'https://www.youtube.com/watch?v=%s\n' "$1"
+}
+
+play_action() {
+    if [ -n "$start" ]; then
+        # A launch timestamp applies to this video only, not a later IPC loadfile.
+        set -- '--{' --resume-playback=no "$start" "$1" '--}'
+    fi
+    [ "$action" != --resume ] || set -- --resume-playback=yes "$@"
+    [ -z "$ipc" ] || set -- "$ipc" "$@"
+    [ -z "$idle" ] || set -- "$idle" "$@"
+    play "$@"
+}
+
 play() {
+    bindir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || return 1
+    if (umask 077; mkdir -p -- "$state_dir"); then
+        YTTY_LAST_VIDEO_FILE=$last_video
+        export YTTY_LAST_VIDEO_FILE
+        set -- --script="$bindir/ytty-resume.lua" "$@"
+    fi
     browser=${YTTY_COOKIES_FROM_BROWSER:-}
     if [ -z "$browser" ] && [ -n "${YTTY_WATERFOX_PROFILE:-}" ]; then
         browser=firefox:$YTTY_WATERFOX_PROFILE
     fi
     if [ "$fast" = yes ]; then
         if [ -n "$browser" ]; then
-            bindir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || return 1
             YTTY_EXTRACTOR=$extractor YTTY_RETRY_BROWSER=$browser
             export YTTY_EXTRACTOR YTTY_RETRY_BROWSER
             extractor=$bindir/ytty-extract
@@ -95,7 +158,7 @@ play() {
         set -- --ytdl-raw-options-append="cookies-from-browser=$browser" "$@"
     fi
     exec mpv --vo=kitty --vo-kitty-use-shm=yes --profile=sw-fast \
-        --msg-level="all=$log_level" \
+        --msg-level="all=$log_level" --save-position-on-quit=yes \
         --hwdec=videotoolbox-copy --sws-allow-zimg=no --sws-scaler=fast-bilinear \
         --script-opts-append="ytdl_hook-ytdl_path=$extractor" \
         --ytdl-format='bestvideo[height<=1080]+bestaudio/best[height<=1080]' \
@@ -188,7 +251,7 @@ search_menu() {
                 id=$(printf '%s\n' "$results" | awk -F '\t' -v n="$choice" 'NR == n { print $1 }')
                 if [ -n "$id" ]; then
                     if [ "$screen" = yes ]; then trap ':' INT; fi
-                    (play "https://www.youtube.com/watch?v=$id")
+                    (play "$(video_url "$id")")
                     status=$?
                     if [ "$screen" = yes ]; then trap 'exit 130' INT; fi
                     case $status in
@@ -203,6 +266,16 @@ search_menu() {
     done
 }
 
+case $action in
+    --first)
+        results=$(fetch_results 1 "$1" '') || fail 'YouTube search failed.'
+        id=$(printf '%s\n' "$results" | awk -F '\t' 'NR == 1 { print $1 }')
+        [ -n "$id" ] || fail 'No videos found.'
+        play_action "$(video_url "$id")"
+        exit $?
+        ;;
+    --resume) play_action "$resume_url"; exit $? ;;
+esac
 [ "$search" = yes ] || play "$@"
 screen=no
 if [ -t 0 ] && [ -t 2 ] && [ "${TERM:-dumb}" != dumb ]; then
