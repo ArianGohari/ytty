@@ -5,8 +5,8 @@ usage() {
         '                    [--start=TIME] {YOUTUBE_URL | --id VIDEO_ID | --first QUERY | --resume}' \
         '       ytty-ghostty [--window|--tab|--split[=left|right]] [--fast|--no-fast] --search QUERY' \
         '       ytty-ghostty --replace PLAYER_TOKEN [--start=TIME] --id VIDEO_ID' \
-        '       ytty-ghostty --control PLAYER_TOKEN {pause | play | position | seek SECONDS}' \
-        '' 'Default: --window. --split opens on the right and prints its token for direct playback.'
+        '       ytty-ghostty --control PLAYER_TOKEN {pause | play | position | seek SECONDS | seek-to SECONDS}' \
+        '' 'Default: --window. Direct playback prints a token. --split opens on the right.'
 }
 
 invalid() { usage >&2; exit 2; }
@@ -21,7 +21,7 @@ player_command() {
     shift
     socket=$slot/mpv.sock
     [ -O "$slot" ] && [ ! -L "$slot" ] && [ -S "$socket" ] || {
-        printf '%s\n' 'That player split is not running.' >&2; exit 1;
+        printf '%s\n' 'That player is not running.' >&2; exit 1;
     }
     /usr/bin/perl -MIO::Socket::UNIX -MJSON::PP -e '
         alarm 2;
@@ -32,8 +32,8 @@ player_command() {
         if ($action eq "replace") {
             @command = ("loadfile", $arg, "replace");
             push @command, -1, {start => $start, "resume-playback" => "no"} if length $start;
-        } elsif ($action eq "seek") {
-            @command = ("seek", 0 + $arg, "relative+exact");
+        } elsif ($action eq "seek" || $action eq "seek-to") {
+            @command = ("seek", 0 + $arg, $action eq "seek-to" ? "absolute+exact" : "relative+exact");
         } elsif ($action eq "position") {
             @command = ("get_property", "time-pos");
         } else {
@@ -66,10 +66,15 @@ if [ "${1-}" = --control ]; then
             case $seconds in ''|*[!0123456789]*) invalid ;; esac
             [ "${#seconds}" -le 9 ] || invalid
             ;;
+        seek-to)
+            [ "$#" -eq 3 ] || invalid
+            case $3 in ''|.*|*.|*.*.*|*[!0123456789.]*) invalid ;; esac
+            [ "${#3}" -le 19 ] || invalid
+            ;;
         *) invalid ;;
     esac
     player_command "$@" && exit 0
-    printf '%s\n' 'The player split did not complete the command.' >&2
+    printf '%s\n' 'The player did not complete the command.' >&2
     exit 1
 fi
 
@@ -119,7 +124,7 @@ esac
 if [ -n "$replace" ]; then
     [ -z "$mode$playback_mode" ] && [ "$action" = --id ] || invalid
     player_command "$replace" replace "$url" "$start" && exit 0
-    printf '%s\n' 'The player split did not accept the video.' >&2
+    printf '%s\n' 'The player did not accept the video.' >&2
     exit 1
 fi
 
@@ -151,12 +156,13 @@ case $mode in
                 }
             }
         ')
-        if [ "$action" != --search ]; then
-            slot=$(mktemp -d /tmp/ytty.XXXXXXXXXXXX) || exit 1
-            set -- "--input-ipc-server=$slot/mpv.sock" --idle=yes "$@"
-        fi
         ;;
 esac
+if [ "$action" != --search ]; then
+    slot=$(mktemp -d /tmp/ytty.XXXXXXXXXXXX) || exit 1
+    case $mode in split-*) set -- --idle=yes "$@" ;; esac
+    set -- "--input-ipc-server=$slot/mpv.sock" "$@"
+fi
 
 /usr/bin/osascript - "$mode" "$origin_tty" "$slot" /usr/bin/env \
     "PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH" "XDG_STATE_HOME=${XDG_STATE_HOME:-}" \
@@ -172,7 +178,7 @@ on run argv
     end repeat
     if playerSlot is not "" then
         set cleanupScript to "slot=$1; shift; trap 'rm -f \"$slot/mpv.sock\"; rmdir \"$slot\"' 0; trap 'exit 129' HUP; trap 'exit 143' TERM; \"$@\""
-        set playerCommand to "/bin/sh -c " & quoted form of cleanupScript & " ytty-split " & quoted form of playerSlot & " " & playerCommand
+        set playerCommand to "/bin/sh -c " & quoted form of cleanupScript & " ytty-player " & quoted form of playerSlot & " " & playerCommand
     end if
 
     tell application "Ghostty"
@@ -212,4 +218,7 @@ if [ "$status" -ne 0 ]; then
     [ -z "$slot" ] || rmdir "$slot" 2>/dev/null
     exit "$status"
 fi
-[ -z "$slot" ] || printf 'Split: %s\n' "${slot##*.}"
+if [ -n "$slot" ]; then
+    case $mode in split-*) label=Split ;; *) label=Player ;; esac
+    printf '%s: %s\n' "$label" "${slot##*.}"
+fi
