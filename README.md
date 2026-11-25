@@ -28,20 +28,39 @@ Number to play  |  m more  |  s new search  |  q / Enter quit
 >
 ```
 
-## Quick start
+## Setup
 
-Install `mpv` and `yt-dlp` (2026.11.23 or newer). Use a terminal with Kitty graphics support.
+- `mpv`
+- `yt-dlp` 2026.11.23 or newer
+- A terminal with Kitty graphics support
+- [Ghostty](https://ghostty.org/) 1.3 or newer on macOS for `ytty-ghostty`
+
+Add the checkout's `bin` directory to your `PATH`:
 
 ```sh
 export PATH="/path/to/ytty/bin:$PATH"
 ```
 
-On macOS, `ytty-ghostty` needs Ghostty 1.3 or newer. It opens a window by default; add `--split` to play beside your current terminal.
+## Use
 
 ```sh
+ytty
+ytty 'https://www.youtube.com/watch?v=jNQXAC9IVRw'
 ytty-ghostty --split --id jNQXAC9IVRw
 ```
 
-See `ytty --help` and `ytty-ghostty --help` for more commands. For agent use, install the [YouTube skill](skills/youtube/SKILL.md) and put `ytty-ghostty` on the agent's `PATH`.
+Pick a result by number. Use `m` for more results, `b` to go back, or `s` for a new search. Press `q` during playback to return to the search menu, then `q` or Enter to exit.
 
-If YouTube asks you to sign in, set `YTTY_COOKIES_FROM_BROWSER` to a browser where you're already signed in, for example `export YTTY_COOKIES_FROM_BROWSER=firefox`. For other playback problems, try `--no-fast`.
+`ytty-ghostty` opens a window by default. Use `--tab` for a tab or `--split` to play beside your current Ghostty terminal. See `ytty --help` and `ytty-ghostty --help` for more commands.
+
+For agent use, install the [YouTube skill](skills/youtube/SKILL.md) and put `ytty-ghostty` on the agent's `PATH`.
+
+## Browser cookies (optional)
+
+Fast mode starts without cookies. If YouTube asks you to sign in to confirm you're not a bot, it retries once with cookies from the browser you configured. Choose a browser where you're already signed in:
+
+```sh
+export YTTY_COOKIES_FROM_BROWSER=firefox
+```
+
+Try `--no-fast` if playback fails or you expected surround sound. It uses the configured cookies on the first attempt. Use `ytty --logs` to see mpv logs.
