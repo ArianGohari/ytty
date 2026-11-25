@@ -95,42 +95,40 @@ while :; do
     esac
 done
 
-browse=no
-case ${1-} in
+action=${1-}
+url=
+case $action in
     --help|-h) usage; exit 0 ;;
     --search|--first)
         [ "$#" -eq 2 ] && [ -n "$2" ] || invalid
-        if [ "$1" = --search ]; then
-            [ -z "$start" ] || invalid
-            browse=yes
-        fi
+        [ "$action" != --search ] || [ -z "$start" ] || invalid
         ;;
     --resume) [ "$#" -eq 1 ] || invalid ;;
     --id)
         [ "$#" -eq 2 ] && [ "${#2}" -eq 11 ] || invalid
         case $2 in *[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-]*) invalid ;; esac
-        set -- --ytdl-raw-options-append=no-playlist= "https://www.youtube.com/watch?v=$2"
+        url=https://www.youtube.com/watch?v=$2
         ;;
     https://youtube.com/*|https://www.youtube.com/*|https://m.youtube.com/*|https://youtu.be/*)
-        [ "$#" -eq 1 ] && [ -z "$replace" ] || invalid
-        set -- --ytdl-raw-options-append=no-playlist= "$1"
+        [ "$#" -eq 1 ] || invalid
+        url=$1
         ;;
     *) invalid ;;
 esac
 
 if [ -n "$replace" ]; then
-    [ -z "$mode$playback_mode" ] && [ "$1" = --ytdl-raw-options-append=no-playlist= ] || invalid
-    player_command "$replace" replace "$2" "$start" && exit 0
+    [ -z "$mode$playback_mode" ] && [ "$action" = --id ] || invalid
+    player_command "$replace" replace "$url" "$start" && exit 0
     printf '%s\n' 'The player split did not accept the video.' >&2
     exit 1
 fi
 
-if [ -n "$start" ]; then
-    if [ "$1" = --ytdl-raw-options-append=no-playlist= ]; then
-        set -- "$1" '--{' "--start=$start" --resume-playback=no "$2" '--}'
-    else
-        set -- "--start=$start" "$@"
-    fi
+if [ -n "$url" ]; then
+    set -- "$url"
+    [ -z "$start" ] || set -- '--{' "--start=$start" --resume-playback=no "$url" '--}'
+    set -- --ytdl-raw-options-append=no-playlist= "$@"
+elif [ -n "$start" ]; then
+    set -- "--start=$start" "$@"
 fi
 [ -z "$playback_mode" ] || set -- "$playback_mode" "$@"
 mode=${mode:-window}
@@ -154,27 +152,23 @@ case $mode in
             }
         ')
         [ -n "$origin_tty" ] || { printf '%s\n' 'Run --split from a Ghostty terminal, or use --window.' >&2; exit 1; }
-        if [ "$browse" = no ]; then
+        if [ "$action" != --search ]; then
             slot=$(mktemp -d /tmp/ytty.XXXXXXXXXXXX) || exit 1
             set -- "--input-ipc-server=$slot/mpv.sock" --idle=yes "$@"
         fi
         ;;
 esac
 
-/usr/bin/osascript - "$mode" "$origin_tty" "$slot" "$player" \
+/usr/bin/osascript - "$mode" "$origin_tty" "$slot" /usr/bin/env \
     "PATH=$HOME/.local/bin:/opt/homebrew/bin:$PATH" "XDG_STATE_HOME=${XDG_STATE_HOME:-}" \
     "YTTY_COOKIES_FROM_BROWSER=${YTTY_COOKIES_FROM_BROWSER:-}" \
-    "YTTY_WATERFOX_PROFILE=${YTTY_WATERFOX_PROFILE:-}" "$@" <<'APPLESCRIPT'
+    "YTTY_WATERFOX_PROFILE=${YTTY_WATERFOX_PROFILE:-}" "$player" "$@" <<'APPLESCRIPT'
 on run argv
     set launchMode to item 1 of argv
     set originTTY to item 2 of argv
     set playerSlot to item 3 of argv
-    set playerCommand to "/usr/bin/env"
-    repeat with playerEnv in items 5 thru 8 of argv
-        set playerCommand to playerCommand & " " & quoted form of (contents of playerEnv)
-    end repeat
-    set playerCommand to playerCommand & " " & quoted form of (item 4 of argv)
-    repeat with playerArg in items 9 thru -1 of argv
+    set playerCommand to quoted form of (item 4 of argv)
+    repeat with playerArg in items 5 thru -1 of argv
         set playerCommand to playerCommand & " " & quoted form of (contents of playerArg)
     end repeat
     if playerSlot is not "" then

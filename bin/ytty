@@ -52,32 +52,26 @@ for arg do
     option_count=$((option_count + 1))
 done
 
-case $action in
-    --first)
-        [ "$#" -eq 1 ] || usage_error
-        case $1 in *[![:space:]]*) ;; *) usage_error ;; esac
-        ;;
-    --resume) [ "$#" -eq 0 ] || usage_error ;;
-esac
-
 set_colors 2
 state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/ytty
 last_video=$state_dir/last-video
-if [ -n "$action" ]; then
-    [ "$start" != --start= ] && [ "$ipc" != --input-ipc-server= ] || usage_error
-    if [ "$action" = --resume ]; then
-        resume_url=$(cat "$last_video" 2>/dev/null) || fail 'No last YouTube video.'
-        case $resume_url in
-            *[![:graph:]]*) fail 'Invalid last YouTube video.' ;;
-            http://youtube.com/*|http://www.youtube.com/*|http://m.youtube.com/*|http://youtu.be/*|\
-            https://youtube.com/*|https://www.youtube.com/*|https://m.youtube.com/*|https://youtu.be/*) ;;
-            *) fail 'Invalid last YouTube video.' ;;
-        esac
-    fi
-fi
-
 case ${action:-${1-}} in
-    --first|--resume) ;;
+    --first|--resume)
+        [ "$start" != --start= ] && [ "$ipc" != --input-ipc-server= ] || usage_error
+        if [ "$action" = --first ]; then
+            [ "$#" -eq 1 ] || usage_error
+            case $1 in *[![:space:]]*) ;; *) usage_error ;; esac
+        else
+            [ "$#" -eq 0 ] || usage_error
+            resume_url=$(cat "$last_video" 2>/dev/null) || fail 'No last YouTube video.'
+            case $resume_url in
+                *[![:graph:]]*) fail 'Invalid last YouTube video.' ;;
+                http://youtube.com/*|http://www.youtube.com/*|http://m.youtube.com/*|http://youtu.be/*|\
+                https://youtube.com/*|https://www.youtube.com/*|https://m.youtube.com/*|https://youtu.be/*) ;;
+                *) fail 'Invalid last YouTube video.' ;;
+            esac
+        fi
+        ;;
     --help|-h) usage; exit 0 ;;
     '') search=yes ;;
     --search)
@@ -107,16 +101,14 @@ has_fixed_version() {
     '
 }
 
-extractor=$(command -v yt-dlp)
-if ! has_fixed_version "$extractor"; then
-    extractor=/opt/homebrew/bin/yt-dlp
-    if ! has_fixed_version "$extractor"; then
-        extractor=${UV_TOOL_BIN_DIR:-$HOME/.local/bin}/yt-dlp
-        if ! has_fixed_version "$extractor"; then
-            fail 'yt-dlp 2026.11.23 or later is required. Update with Homebrew or uv.'
-        fi
+extractor=
+for candidate in "$(command -v yt-dlp)" /opt/homebrew/bin/yt-dlp "${UV_TOOL_BIN_DIR:-$HOME/.local/bin}/yt-dlp"; do
+    if has_fixed_version "$candidate"; then
+        extractor=$candidate
+        break
     fi
-fi
+done
+[ -n "$extractor" ] || fail 'yt-dlp 2026.11.23 or later is required. Update with Homebrew or uv.'
 
 video_url() {
     printf 'https://www.youtube.com/watch?v=%s\n' "$1"
