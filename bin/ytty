@@ -159,6 +159,7 @@ play() {
 
 fetch_results() {
     fetched=$("$extractor" --ignore-config --flat-playlist \
+        --force-ipv4 --socket-timeout 5 --extractor-retries 0 \
         --replace-in-metadata 'title,channel,uploader' '[\x00-\x1f\x7f-\x9f]' ' ' \
         --print "$(printf '%%(id)s\t%%(title)s\t%%(channel,uploader|Unknown)s\t%%(duration_string|?)s')" \
         -- "ytsearch$1:$2") || return 1
